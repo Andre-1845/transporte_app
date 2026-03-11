@@ -4,6 +4,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_service.dart';
 import 'trip_service.dart';
+import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 
 class MapPage extends StatefulWidget {
   final int tripId;
@@ -36,10 +38,19 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> loadBusIcon() async {
-    busIcon = await BitmapDescriptor.fromAssetImage(
-      const ImageConfiguration(size: Size(48, 48)),
-      "assets/icons/bus_yellow.png",
+    final ByteData data = await rootBundle.load("assets/icons/bus_yellow.png");
+
+    final codec = await ui.instantiateImageCodec(
+      data.buffer.asUint8List(),
+      targetWidth: 48, // tamanho do ícone
     );
+
+    final frame = await codec.getNextFrame();
+    final bytes = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+
+    busIcon = BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
+
+    setState(() {});
   }
 
   Future<void> initialize() async {
