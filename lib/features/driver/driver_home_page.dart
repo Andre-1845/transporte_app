@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+
 import '../../core/api_client.dart';
 import '../../core/auth_service.dart';
 import '../auth/login_page.dart';
@@ -16,10 +18,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
   Map<String, dynamic>? trip;
   bool loading = true;
   bool sendingLocation = false;
-  Timer? locationTimer;
 
-  double testLat = -22.4705;
-  double testLng = -44.4500;
+  StreamSubscription<Position>? positionStream;
 
   DriverService? service;
 
@@ -27,6 +27,12 @@ class _DriverHomePageState extends State<DriverHomePage> {
   void initState() {
     super.initState();
     initialize();
+  }
+
+  @override
+  void dispose() {
+    positionStream?.cancel();
+    super.dispose();
   }
 
   Future<void> initialize() async {
@@ -48,8 +54,79 @@ class _DriverHomePageState extends State<DriverHomePage> {
     });
   }
 
+  Future<bool> checkLocationPermission() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // verifica se GPS está ligado
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      debugPrint("GPS desligado");
+      return false;
+    }
+
+    // verifica permissão atual
+    permission = await Geolocator.checkPermission();
+
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+
+      if (permission == LocationPermission.denied) {
+        debugPrint("Permissão negada");
+        return false;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      debugPrint("Permissão negada permanentemente");
+      return false;
+    }
+
+    return true;
+  }
+
+  void startLocationSending(int tripId) async {
+    if (sendingLocation) return;
+
+    bool permissionGranted = await checkLocationPermission();
+
+    if (!permissionGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Permissão de localização necessária")),
+      );
+      return;
+    }
+
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10,
+    );
+
+    positionStream =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (Position position) async {
+            await service!.sendLocation(
+              tripId,
+              position.latitude,
+              position.longitude,
+            );
+          },
+        );
+
+    sendingLocation = true;
+
+    setState(() {});
+  }
+
+  void stopLocationSending() {
+    positionStream?.cancel();
+    sendingLocation = false;
+    setState(() {});
+  }
+
   Future<void> handleLogout() async {
     stopLocationSending();
+
     final auth = AuthService();
     await auth.logout();
 
@@ -60,33 +137,6 @@ class _DriverHomePageState extends State<DriverHomePage> {
       MaterialPageRoute(builder: (_) => const LoginPage()),
       (route) => false,
     );
-  }
-
-  void startLocationSending(int tripId) {
-    if (sendingLocation) return;
-
-    sendingLocation = true;
-
-    locationTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      testLat += 0.0003;
-      testLng += 0.0002;
-
-      await service!.sendLocation(tripId, testLat, testLng);
-    });
-
-    setState(() {});
-  }
-
-  void stopLocationSending() {
-    locationTimer?.cancel();
-    sendingLocation = false;
-    setState(() {});
-  }
-
-  @override
-  void dispose() {
-    locationTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -106,21 +156,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
       appBar: AppBar(
         title: const Text("Motorista"),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              final auth = AuthService();
-              await auth.logout();
-
-              if (!mounted) return;
-
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-                (route) => false,
-              );
-            },
-          ),
+          IconButton(icon: const Icon(Icons.logout), onPressed: handleLogout),
         ],
       ),
       body: Padding(
@@ -128,8 +164,11 @@ class _DriverHomePageState extends State<DriverHomePage> {
         child: Column(
           children: [
             Text("Trip ID: $tripId", style: const TextStyle(fontSize: 18)),
+
             const SizedBox(height: 10),
+
             Text("Status: $status", style: const TextStyle(fontSize: 16)),
+
             const SizedBox(height: 30),
 
             if (!sendingLocation)

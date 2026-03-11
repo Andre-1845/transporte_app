@@ -20,17 +20,26 @@ class _MapPageState extends State<MapPage> {
   TripService? service;
   late GoogleMapController mapController;
 
-  // 🔥 ATIVE/DESATIVE AQUI
-  bool simulationMode = true;
+  BitmapDescriptor? busIcon;
+  LatLng? previousPosition;
 
-  // Coordenadas iniciais (Resende RJ exemplo)
+  bool simulationMode = false;
+
   double testLat = -22.4705;
   double testLng = -44.4500;
 
   @override
   void initState() {
     super.initState();
+    loadBusIcon();
     initialize();
+  }
+
+  Future<void> loadBusIcon() async {
+    busIcon = await BitmapDescriptor.fromAssetImage(
+      const ImageConfiguration(size: Size(48, 48)),
+      "assets/icons/bus_yellow.png",
+    );
   }
 
   Future<void> initialize() async {
@@ -49,7 +58,6 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
-  // 🚍 SIMULA MOVIMENTO
   void startSimulation() {
     timer = Timer.periodic(const Duration(seconds: 2), (_) {
       testLat += 0.0003;
@@ -59,15 +67,12 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  // 🌍 USA BACKEND REAL
   void startPolling() {
     timer = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (service == null) return;
 
       try {
         final data = await service!.getLatestLocation(widget.tripId);
-
-        if (data == null) return;
 
         final lat = double.parse(data["lat"].toString());
         final lng = double.parse(data["lng"].toString());
@@ -79,16 +84,62 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
-  void updateBusPosition(LatLng position) {
+  void updateBusPosition(LatLng newPosition) {
     if (!mounted) return;
 
-    setState(() {
-      markers = {Marker(markerId: const MarkerId("bus"), position: position)};
+    if (previousPosition == null) {
+      previousPosition = newPosition;
+
+      setState(() {
+        markers = {
+          Marker(
+            markerId: const MarkerId("bus"),
+            position: newPosition,
+            icon: busIcon ?? BitmapDescriptor.defaultMarker,
+          ),
+        };
+      });
+
+      return;
+    }
+
+    const int steps = 20;
+
+    double latStep =
+        (newPosition.latitude - previousPosition!.latitude) / steps;
+
+    double lngStep =
+        (newPosition.longitude - previousPosition!.longitude) / steps;
+
+    int currentStep = 0;
+
+    Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      currentStep++;
+
+      double lat = previousPosition!.latitude + latStep * currentStep;
+      double lng = previousPosition!.longitude + lngStep * currentStep;
+
+      LatLng animatedPosition = LatLng(lat, lng);
+
+      setState(() {
+        markers = {
+          Marker(
+            markerId: const MarkerId("bus"),
+            position: animatedPosition,
+            icon: busIcon ?? BitmapDescriptor.defaultMarker,
+          ),
+        };
+      });
+
+      if (currentStep >= steps) {
+        timer.cancel();
+        previousPosition = newPosition;
+      }
     });
 
     mapController.animateCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: position, zoom: 16),
+        CameraPosition(target: newPosition, zoom: 16),
       ),
     );
   }
