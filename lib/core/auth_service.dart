@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/app_config.dart';
 
 class AuthService {
   final Dio dio = Dio(
     BaseOptions(
-      baseUrl: "http://192.168.0.6:8000/api/v1",
+      baseUrl: AppConfig.apiUrl,
       headers: {"Accept": "application/json"},
     ),
   );
