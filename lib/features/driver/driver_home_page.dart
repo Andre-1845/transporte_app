@@ -91,6 +91,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
     bool permissionGranted = await checkLocationPermission();
 
     if (!permissionGranted) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Permissão de localização necessária")),
       );

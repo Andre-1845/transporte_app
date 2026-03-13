@@ -1,9 +1,17 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 import 'core/auth_service.dart';
 import 'features/auth/login_page.dart';
 import 'features/trips/trips_page.dart';
+import 'package:firebase_core/firebase_core.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await dotenv.load(fileName: ".env");
+
+  await Firebase.initializeApp();
+
   runApp(const MyApp());
 }
 

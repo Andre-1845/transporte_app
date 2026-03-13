@@ -28,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (token != null && mounted) {
       final roles = await auth.getRoles();
-
+      if (!mounted) return;
       if (roles.contains("driver")) {
         Navigator.pushReplacement(
           context,
@@ -41,6 +41,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Login inválido")));

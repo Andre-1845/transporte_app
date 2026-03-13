@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "243044707668",
+    "project_id": "busway-492e1",
+    "storage_bucket": "busway-492e1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:243044707668:android:34ea44437e06cbb92b2cc1",
+        "android_client_info": {
+          "package_name": "com.example.transporte_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA5TlqjV2qqWz1fhNSCE_EgDJ_ZNbIl3Nc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

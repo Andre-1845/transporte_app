@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthService {
   final Dio dio = Dio(
@@ -26,7 +27,7 @@ class AuthService {
 
       return token;
     } catch (e) {
-      print("Erro no login: $e");
+      debugPrint("Erro no login: $e");
       return null;
     }
   }

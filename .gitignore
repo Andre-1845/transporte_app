@@ -44,3 +44,19 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# .gitignore - Adicionar estas linhas
+.env
+*.env
+.env.local
+.env.production
+.env.development
+
+# Android signing keys
+*.keystore
+*.jks
+key.properties
+
+# iOS secrets
+GoogleService-Info.plist
+Debug.entitlements
