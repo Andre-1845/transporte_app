@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
-
+import 'package:flutter_background_service/flutter_background_service.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_service.dart';
 import '../auth/login_page.dart';
@@ -19,9 +17,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   bool loading = true;
   bool sendingLocation = false;
 
-  StreamSubscription<Position>? positionStream;
-
-  DriverService? service;
+  DriverService? driverService;
 
   @override
   void initState() {
@@ -29,105 +25,85 @@ class _DriverHomePageState extends State<DriverHomePage> {
     initialize();
   }
 
-  @override
-  void dispose() {
-    positionStream?.cancel();
-    super.dispose();
-  }
-
   Future<void> initialize() async {
-    final auth = AuthService();
-    final token = await auth.getToken();
+    try {
+      final auth = AuthService();
+      final token = await auth.getToken();
 
-    if (token == null) return;
-
-    final api = ApiClient(token);
-    service = DriverService(api.dio);
-
-    final result = await service!.getTodayTrip();
-
-    if (!mounted) return;
-
-    setState(() {
-      trip = result;
-      loading = false;
-    });
-  }
-
-  Future<bool> checkLocationPermission() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // verifica se GPS está ligado
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      debugPrint("GPS desligado");
-      return false;
-    }
-
-    // verifica permissão atual
-    permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-
-      if (permission == LocationPermission.denied) {
-        debugPrint("Permissão negada");
-        return false;
+      if (token == null) {
+        setState(() {
+          loading = false;
+        });
+        return;
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
-      debugPrint("Permissão negada permanentemente");
-      return false;
-    }
+      final api = ApiClient(token);
+      driverService = DriverService(api.dio);
 
-    return true;
-  }
+      final result = await driverService!.getTodayTrip();
 
-  void startLocationSending(int tripId) async {
-    if (sendingLocation) return;
-
-    bool permissionGranted = await checkLocationPermission();
-
-    if (!permissionGranted) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Permissão de localização necessária")),
-      );
-      return;
+      setState(() {
+        trip = result;
+        loading = false;
+      });
+    } catch (e) {
+      debugPrint("Erro ao carregar viagem: $e");
+
+      if (!mounted) return;
+
+      setState(() {
+        loading = false;
+      });
     }
-
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 10,
-    );
-
-    positionStream =
-        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
-          (Position position) async {
-            await service!.sendLocation(
-              tripId,
-              position.latitude,
-              position.longitude,
-            );
-          },
-        );
-
-    sendingLocation = true;
-
-    setState(() {});
   }
 
-  void stopLocationSending() {
-    positionStream?.cancel();
-    sendingLocation = false;
-    setState(() {});
+  Future<void> startTracking(int tripId) async {
+    if (sendingLocation) return;
+
+    try {
+      final auth = AuthService();
+      final token = await auth.getToken();
+
+      final bgService = FlutterBackgroundService();
+
+      bool isRunning = await bgService.isRunning();
+
+      if (!isRunning) {
+        await bgService.startService();
+      }
+
+      bgService.invoke("setTrip", {"tripId": tripId, "token": token});
+
+      if (!mounted) return;
+
+      setState(() {
+        sendingLocation = true;
+      });
+    } catch (e) {
+      debugPrint("Erro ao iniciar rastreamento: $e");
+    }
+  }
+
+  Future<void> stopTracking() async {
+    try {
+      final bgService = FlutterBackgroundService();
+
+      bgService.invoke("stopService");
+
+      if (!mounted) return;
+
+      setState(() {
+        sendingLocation = false;
+      });
+    } catch (e) {
+      debugPrint("Erro ao parar rastreamento: $e");
+    }
   }
 
   Future<void> handleLogout() async {
-    stopLocationSending();
+    await stopTracking();
 
     final auth = AuthService();
     await auth.logout();
@@ -144,15 +120,11 @@ class _DriverHomePageState extends State<DriverHomePage> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: AppBar(title: const Text("Motorista")),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
-
-    if (trip == null) {
-      return const Scaffold(body: Center(child: Text("Nenhuma viagem hoje")));
-    }
-
-    final tripId = trip!['id'];
-    final status = trip!['status'];
 
     return Scaffold(
       appBar: AppBar(
@@ -161,39 +133,87 @@ class _DriverHomePageState extends State<DriverHomePage> {
           IconButton(icon: const Icon(Icons.logout), onPressed: handleLogout),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text("Trip ID: $tripId", style: const TextStyle(fontSize: 18)),
-
-            const SizedBox(height: 10),
-
-            Text("Status: $status", style: const TextStyle(fontSize: 16)),
-
-            const SizedBox(height: 30),
-
-            if (!sendingLocation)
-              ElevatedButton(
-                onPressed: () async {
-                  await service!.startTrip(tripId);
-                  startLocationSending(tripId);
-                },
-                child: const Text("INICIAR VIAGEM"),
+      body: trip == null
+          ? const Center(
+              child: Text(
+                "Nenhuma viagem programada para hoje",
+                style: TextStyle(fontSize: 18),
               ),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Text(
+                    "Trip ID: ${trip!['id']}",
+                    style: const TextStyle(fontSize: 18),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Status: ${trip!['status']}",
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 30),
 
-            if (sendingLocation)
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () async {
-                  stopLocationSending();
-                  await service!.finishTrip(tripId);
-                },
-                child: const Text("FINALIZAR VIAGEM"),
+                  if (!sendingLocation)
+                    ElevatedButton(
+                      onPressed: () async {
+                        try {
+                          bool started = await driverService!.startTrip(
+                            trip!['id'],
+                          );
+
+                          if (!started) {
+                            debugPrint("Falha ao iniciar viagem");
+                            return;
+                          }
+
+                          await startTracking(trip!['id']);
+
+                          if (!mounted) return;
+
+                          setState(() {
+                            trip!['status'] = "in_progress";
+                          });
+                        } catch (e) {
+                          debugPrint("Erro ao iniciar viagem: $e");
+                        }
+                      },
+                      child: const Text("INICIAR VIAGEM"),
+                    ),
+
+                  if (sendingLocation)
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                      ),
+                      onPressed: () async {
+                        try {
+                          await stopTracking();
+
+                          bool finished = await driverService!.finishTrip(
+                            trip!['id'],
+                          );
+
+                          if (!finished) {
+                            debugPrint("Falha ao finalizar viagem");
+                            return;
+                          }
+
+                          if (!mounted) return;
+
+                          setState(() {
+                            trip!['status'] = "finished";
+                          });
+                        } catch (e) {
+                          debugPrint("Erro ao finalizar viagem: $e");
+                        }
+                      },
+                      child: const Text("FINALIZAR VIAGEM"),
+                    ),
+                ],
               ),
-          ],
-        ),
-      ),
+            ),
     );
   }
 }

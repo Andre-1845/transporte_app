@@ -1,13 +1,15 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
-import 'package:flutter/foundation.dart';
 
 class AuthService {
   final Dio dio = Dio(
     BaseOptions(
       baseUrl: AppConfig.apiUrl,
-      headers: {"Accept": "application/json"},
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
     ),
   );
 
@@ -19,7 +21,7 @@ class AuthService {
       );
 
       final token = response.data['token'];
-      final roles = List<String>.from(response.data['user']['roles']);
+      final roles = List<String>.from(response.data['user']['roles'] ?? []);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', token);
@@ -27,7 +29,10 @@ class AuthService {
 
       return token;
     } catch (e) {
-      debugPrint("Erro no login: $e");
+      if (e is DioException) {
+        print("STATUS: ${e.response?.statusCode}");
+        print("DATA: ${e.response?.data}");
+      }
       return null;
     }
   }

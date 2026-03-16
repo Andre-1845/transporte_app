@@ -14,41 +14,9 @@ class TripsPage extends StatefulWidget {
 }
 
 class _TripsPageState extends State<TripsPage> {
-  List<Trip> trips = [];
+  List<Trip> activeTrips = [];
+  List<Trip> scheduledTrips = [];
   bool loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    loadTrips();
-  }
-
-  Future<void> loadTrips() async {
-    try {
-      final auth = AuthService();
-      final token = await auth.getToken();
-
-      if (token == null) {
-        setState(() => loading = false);
-        return;
-      }
-
-      final api = ApiClient(token);
-      final service = TripService(api.dio);
-
-      final result = await service.getActiveTrips();
-
-      if (!mounted) return;
-
-      setState(() {
-        trips = result;
-        loading = false;
-      });
-    } catch (e) {
-      debugPrint("Erro ao carregar trips: $e");
-      setState(() => loading = false);
-    }
-  }
 
   Future<void> handleLogout() async {
     final auth = AuthService();
@@ -63,40 +31,110 @@ class _TripsPageState extends State<TripsPage> {
     );
   }
 
+  Future<void> loadTrips() async {
+    try {
+      final auth = AuthService();
+      final token = await auth.getToken();
+
+      final api = ApiClient(token);
+      final service = TripService(api.dio);
+
+      final result = await service.getTodayTrips();
+
+      if (!mounted) return;
+
+      setState(() {
+        activeTrips = result["active"] ?? [];
+        scheduledTrips = result["scheduled"] ?? [];
+        loading = false;
+      });
+    } catch (e) {
+      debugPrint("Erro ao carregar trips: $e");
+
+      if (!mounted) return;
+
+      setState(() {
+        loading = false;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    loadTrips();
+  }
+
+  Widget buildTripTile(Trip trip, bool active) {
+    return ListTile(
+      title: Text(trip.name),
+      subtitle: Text(trip.startTime ?? ""),
+      trailing: active
+          ? const Icon(Icons.directions_bus, color: Colors.green)
+          : const Icon(Icons.schedule),
+      onTap: active
+          ? () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => MapPage(tripId: trip.id)),
+              );
+            }
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (loading) {
+      return Scaffold(
+        appBar: AppBar(title: Text("Transporte Escolar")),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Trips Ativas"),
+        title: const Text("Transporte Escolar"),
         actions: [
           IconButton(icon: const Icon(Icons.logout), onPressed: handleLogout),
         ],
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : trips.isEmpty
-          ? const Center(
-              child: Text(
-                "Nenhuma viagem ativa no momento",
-                style: TextStyle(fontSize: 16),
-              ),
-            )
-          : ListView.builder(
-              itemCount: trips.length,
-              itemBuilder: (_, i) {
-                return ListTile(
-                  title: Text(trips[i].name),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => MapPage(tripId: trips[i].id),
-                      ),
-                    );
-                  },
-                );
-              },
+
+      body: ListView(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              "Viagens em andamento",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+          ),
+
+          if (activeTrips.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text("Nenhuma viagem em andamento"),
+            ),
+
+          ...activeTrips.map((t) => buildTripTile(t, true)),
+
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: Text(
+              "Viagens agendadas",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+
+          if (scheduledTrips.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text("Nenhuma viagem agendada"),
+            ),
+
+          ...scheduledTrips.map((t) => buildTripTile(t, false)),
+        ],
+      ),
     );
   }
 }
