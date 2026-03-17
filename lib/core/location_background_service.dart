@@ -8,8 +8,6 @@ import 'package:flutter/widgets.dart';
 
 @pragma('vm:entry-point')
 Future<void> onStart(ServiceInstance service) async {
-  DartPluginRegistrant.ensureInitialized();
-
   int? tripId;
   String? token;
   Timer? timer;
